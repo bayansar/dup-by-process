@@ -34,7 +34,6 @@ core_initcall(myinit);
 
 void dup_by_pid(struct FdReq*, struct file*, int*);
 
-
 SYSCALL_DEFINE2(sendfd, unsigned int, fd, pid_t, pid){
 	struct FdReq *afdReq;
 	struct FdReq *hitfdReq;
@@ -106,6 +105,7 @@ SYSCALL_DEFINE0(rcvfd){
 
 	// wait for awake signal
 	if(down_interruptible(&(afdReq->sem_lock))){
+		list_del(&(afdReq->list));
 		return -EINTR;
 	};
 
@@ -130,7 +130,7 @@ void dup_by_pid(struct FdReq *hitfdReq, struct file *file, int *ret){
 		files = get_files_struct(task);
 		if(files){
 			new_fd = __alloc_fd(files,0,rlimit(RLIMIT_NOFILE),0);
-			if(new_fd >=0){
+			if(new_fd >= 0){
 				__fd_install(files,new_fd,file);
 				hitfdReq->rslt_fd = new_fd;
 				hitfdReq->using = 1;
@@ -140,9 +140,11 @@ void dup_by_pid(struct FdReq *hitfdReq, struct file *file, int *ret){
 				new_fd = -EMFILE;
 			}				
 		}else{
+			fput(file);
 			new_fd = -ENOENT;	
 		}
 	}else{
+		fput(file);
 		new_fd = -ENOENT;
 	}
 	*ret = new_fd;
